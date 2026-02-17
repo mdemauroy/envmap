@@ -136,6 +136,16 @@ func TestApplyTrimRoundtrip(t *testing.T) {
 	}
 }
 
+func TestVaultImplementsMultiKeyProvider(t *testing.T) {
+	// Verify at compile time that vaultProvider implements MultiKeyProvider.
+	// We can't construct a real vault client without a server, but we can
+	// verify the interface is satisfied via a type assertion on nil.
+	var p interface{} = (*vaultProvider)(nil)
+	if _, ok := p.(MultiKeyProvider); !ok {
+		t.Error("vaultProvider does not implement MultiKeyProvider")
+	}
+}
+
 // mockProvider for testing factory registration pattern
 type mockProvider struct{}
 

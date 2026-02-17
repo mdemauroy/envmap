@@ -65,6 +65,15 @@ func CollectEnvWithMetadata(ctx context.Context, projectCfg ProjectConfig, globa
 	if err != nil {
 		return nil, err
 	}
+
+	if len(envCfg.Mapping) > 0 {
+		mkp, ok := p.(provider.MultiKeyProvider)
+		if !ok {
+			return nil, fmt.Errorf("provider %s does not support multi-key secret reading (required by mapping)", envCfg.GetProvider())
+		}
+		return provider.CollectMappedSecrets(ctx, mkp, envCfg.Mapping)
+	}
+
 	return provider.ListOrDescribe(ctx, p, provider.ResolvedPrefix(envCfg.ToProviderConfig()))
 }
 
@@ -77,6 +86,23 @@ func FetchSecret(ctx context.Context, projectCfg ProjectConfig, globalCfg Global
 	if err != nil {
 		return "", err
 	}
+
+	if sm, ok := envCfg.Mapping[key]; ok {
+		mkp, ok := p.(provider.MultiKeyProvider)
+		if !ok {
+			return "", fmt.Errorf("provider %s does not support multi-key secret reading (required by mapping)", envCfg.GetProvider())
+		}
+		data, err := mkp.ReadSecret(ctx, sm.Path)
+		if err != nil {
+			return "", err
+		}
+		val, ok := data[sm.Key]
+		if !ok {
+			return "", fmt.Errorf("key %q not found in secret at path %q", sm.Key, sm.Path)
+		}
+		return val, nil
+	}
+
 	return p.Get(ctx, provider.ApplyPrefix(envCfg.ToProviderConfig(), key))
 }
 
@@ -84,6 +110,9 @@ func WriteSecret(ctx context.Context, projectCfg ProjectConfig, globalCfg Global
 	envCfg, ok := projectCfg.Envs[envName]
 	if !ok {
 		return fmt.Errorf("env %q not found in project config", envName)
+	}
+	if len(envCfg.Mapping) > 0 {
+		return fmt.Errorf("env %q uses mapping mode; secrets are read-only and managed externally", envName)
 	}
 	p, err := NewProvider(envName, envCfg, globalCfg)
 	if err != nil {
@@ -96,6 +125,9 @@ func DeleteSecret(ctx context.Context, projectCfg ProjectConfig, globalCfg Globa
 	envCfg, ok := projectCfg.Envs[envName]
 	if !ok {
 		return fmt.Errorf("env %q not found in project config", envName)
+	}
+	if len(envCfg.Mapping) > 0 {
+		return fmt.Errorf("env %q uses mapping mode; secrets are read-only and managed externally", envName)
 	}
 	p, err := NewProvider(envName, envCfg, globalCfg)
 	if err != nil {

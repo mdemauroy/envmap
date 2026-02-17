@@ -28,6 +28,13 @@ type Provider interface {
 	Set(ctx context.Context, name, value string) error
 }
 
+// MultiKeyProvider can read all key-value pairs from a single secret path.
+// Providers that store multiple keys per secret (e.g., Vault KV) implement this
+// to support the mapping configuration.
+type MultiKeyProvider interface {
+	ReadSecret(ctx context.Context, path string) (map[string]string, error)
+}
+
 // Factory creates a Provider from configuration.
 type Factory func(envCfg EnvConfig, providerCfg ProviderConfig) (Provider, error)
 

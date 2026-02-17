@@ -128,6 +128,87 @@ envs:
 	}
 }
 
+func TestLoadProjectConfigWithMapping(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".envmap.yaml")
+
+	content := `
+project: testapp
+default_env: dev
+envs:
+  dev:
+    provider: vault
+    mapping:
+      CDN_TOKEN:
+        path: shared/cdn
+        key: CDN_TOKEN
+      API_KEY:
+        path: myapp
+        key: API_SECRET_KEY
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadProjectConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig: %v", err)
+	}
+
+	devCfg := cfg.Envs["dev"]
+	if len(devCfg.Mapping) != 2 {
+		t.Fatalf("len(Mapping) = %d, want 2", len(devCfg.Mapping))
+	}
+
+	cdnMapping := devCfg.Mapping["CDN_TOKEN"]
+	if cdnMapping.Path != "shared/cdn" {
+		t.Errorf("CDN_TOKEN.Path = %q, want %q", cdnMapping.Path, "shared/cdn")
+	}
+	if cdnMapping.Key != "CDN_TOKEN" {
+		t.Errorf("CDN_TOKEN.Key = %q, want %q", cdnMapping.Key, "CDN_TOKEN")
+	}
+
+	apiMapping := devCfg.Mapping["API_KEY"]
+	if apiMapping.Path != "myapp" {
+		t.Errorf("API_KEY.Path = %q, want %q", apiMapping.Path, "myapp")
+	}
+	if apiMapping.Key != "API_SECRET_KEY" {
+		t.Errorf("API_KEY.Key = %q, want %q", apiMapping.Key, "API_SECRET_KEY")
+	}
+
+	// Verify it propagates to provider config
+	providerCfg := devCfg.ToProviderConfig()
+	if len(providerCfg.Mapping) != 2 {
+		t.Fatalf("provider EnvConfig.Mapping = %d, want 2", len(providerCfg.Mapping))
+	}
+}
+
+func TestLoadProjectConfigMappingAndPathPrefixConflict(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".envmap.yaml")
+
+	content := `
+project: testapp
+default_env: dev
+envs:
+  dev:
+    provider: vault
+    path_prefix: /some/prefix
+    mapping:
+      SOME_VAR:
+        path: some/path
+        key: SOME_KEY
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadProjectConfig(cfgPath)
+	if err == nil {
+		t.Fatal("expected error when both mapping and path_prefix are set")
+	}
+}
+
 func TestLoadProjectConfigValidation(t *testing.T) {
 	tests := []struct {
 		name    string

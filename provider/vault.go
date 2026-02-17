@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 
 	vault "github.com/hashicorp/vault/api"
@@ -71,33 +72,33 @@ func newVault(envCfg EnvConfig, providerCfg ProviderConfig) (Provider, error) {
 
 func (p *vaultProvider) secretPath(name string) string {
 	prefixed := ApplyPrefix(p.envCfg, name)
-	return fmt.Sprintf("%s/data/%s", p.mount, prefixed)
+	return path.Join(p.mount, "data", prefixed)
 }
 
 func (p *vaultProvider) Get(ctx context.Context, name string) (string, error) {
-	path := p.secretPath(name)
-	secret, err := p.client.Logical().ReadWithContext(ctx, path)
+	sPath := p.secretPath(name)
+	secret, err := p.client.Logical().ReadWithContext(ctx, sPath)
 	if err != nil {
-		return "", fmt.Errorf("vault get %s: %w", path, err)
+		return "", fmt.Errorf("vault get %s: %w", sPath, err)
 	}
 	if secret == nil || secret.Data == nil {
-		return "", fmt.Errorf("secret %s not found in vault", path)
+		return "", fmt.Errorf("secret %s not found in vault", sPath)
 	}
 
 	data, ok := secret.Data["data"].(map[string]interface{})
 	if !ok {
-		return "", fmt.Errorf("vault secret %s has unexpected format", path)
+		return "", fmt.Errorf("vault secret %s has unexpected format", sPath)
 	}
 
 	value, ok := data["value"].(string)
 	if !ok {
-		return "", fmt.Errorf("vault secret %s missing 'value' field", path)
+		return "", fmt.Errorf("vault secret %s missing 'value' field", sPath)
 	}
 	return value, nil
 }
 
 func (p *vaultProvider) List(ctx context.Context, prefix string) (map[string]string, error) {
-	listPath := fmt.Sprintf("%s/metadata/%s", p.mount, ensurePrefixSlash(prefix))
+	listPath := path.Join(p.mount, "metadata", ensurePrefixSlash(prefix))
 	secret, err := p.client.Logical().ListWithContext(ctx, listPath)
 	if err != nil {
 		return nil, fmt.Errorf("vault list %s: %w", listPath, err)
@@ -129,16 +130,42 @@ func (p *vaultProvider) List(ctx context.Context, prefix string) (map[string]str
 	return out, nil
 }
 
+func (p *vaultProvider) ReadSecret(ctx context.Context, secretPath string) (map[string]string, error) {
+	fullPath := path.Join(p.mount, "data", secretPath)
+	secret, err := p.client.Logical().ReadWithContext(ctx, fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("vault read %s: %w", fullPath, err)
+	}
+	if secret == nil || secret.Data == nil {
+		return nil, fmt.Errorf("secret %s not found in vault", fullPath)
+	}
+
+	data, ok := secret.Data["data"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("vault secret %s has unexpected format", fullPath)
+	}
+
+	out := make(map[string]string, len(data))
+	for k, v := range data {
+		if s, ok := v.(string); ok {
+			out[k] = s
+		} else {
+			out[k] = fmt.Sprintf("%v", v)
+		}
+	}
+	return out, nil
+}
+
 func (p *vaultProvider) Set(ctx context.Context, name, value string) error {
-	path := p.secretPath(name)
+	sPath := p.secretPath(name)
 	data := map[string]interface{}{
 		"data": map[string]interface{}{
 			"value": value,
 		},
 	}
-	_, err := p.client.Logical().WriteWithContext(ctx, path, data)
+	_, err := p.client.Logical().WriteWithContext(ctx, sPath, data)
 	if err != nil {
-		return fmt.Errorf("vault put %s: %w", path, err)
+		return fmt.Errorf("vault put %s: %w", sPath, err)
 	}
 	return nil
 }

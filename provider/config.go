@@ -2,11 +2,18 @@ package provider
 
 import "strings"
 
+// SecretMapping maps an env var to a specific key within a multi-key Vault secret.
+type SecretMapping struct {
+	Path string `yaml:"path"`
+	Key  string `yaml:"key"`
+}
+
 // EnvConfig represents the environment-specific configuration from the project file.
 type EnvConfig struct {
-	Provider   string `yaml:"provider"`
-	PathPrefix string `yaml:"path_prefix"`
-	Prefix     string `yaml:"prefix"`
+	Provider   string                    `yaml:"provider"`
+	PathPrefix string                    `yaml:"path_prefix"`
+	Prefix     string                    `yaml:"prefix"`
+	Mapping    map[string]SecretMapping  `yaml:"mapping,omitempty"`
 }
 
 // ProviderConfig represents the provider configuration from the global config file.

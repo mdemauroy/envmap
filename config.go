@@ -17,10 +17,11 @@ type ProjectConfig struct {
 }
 
 type EnvConfig struct {
-	Provider   string `yaml:"provider"`
-	Source     string `yaml:"source,omitempty"` // deprecated, use Provider
-	PathPrefix string `yaml:"path_prefix"`
-	Prefix     string `yaml:"prefix"`
+	Provider   string                              `yaml:"provider"`
+	Source     string                              `yaml:"source,omitempty"` // deprecated, use Provider
+	PathPrefix string                              `yaml:"path_prefix"`
+	Prefix     string                              `yaml:"prefix"`
+	Mapping    map[string]provider.SecretMapping   `yaml:"mapping,omitempty"`
 }
 
 func (e EnvConfig) GetProvider() string {
@@ -35,6 +36,7 @@ func (e EnvConfig) ToProviderConfig() provider.EnvConfig {
 		Provider:   e.GetProvider(),
 		PathPrefix: e.PathPrefix,
 		Prefix:     e.Prefix,
+		Mapping:    e.Mapping,
 	}
 }
 
@@ -101,6 +103,11 @@ func (c ProjectConfig) Validate() error {
 	}
 	if _, ok := c.Envs[c.DefaultEnv]; !ok {
 		return fmt.Errorf("default_env %q not found in envs", c.DefaultEnv)
+	}
+	for envName, envCfg := range c.Envs {
+		if len(envCfg.Mapping) > 0 && envCfg.PathPrefix != "" {
+			return fmt.Errorf("env %q: mapping and path_prefix are mutually exclusive", envName)
+		}
 	}
 	return nil
 }
